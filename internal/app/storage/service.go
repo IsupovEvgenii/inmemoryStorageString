@@ -14,9 +14,11 @@ import (
 type Service struct {
 	cfg *config.Config
 	sync.RWMutex
-	cache       map[string]Item
-	expirations map[int64][]string
-	file        *os.File
+	cache          map[string]Item
+	expirations    map[int64][]string
+	deleterChans   []chan time.Duration
+	currentDeleter int
+	file           *os.File
 }
 
 type Item struct {
@@ -24,12 +26,13 @@ type Item struct {
 	Value      string
 }
 
-func New(cfg *config.Config, cache map[string]Item, expirations map[int64][]string, file *os.File) *Service {
+func New(cfg *config.Config, cache map[string]Item, expirations map[int64][]string, file *os.File, deleterChans []chan time.Duration) *Service {
 	return &Service{
-		cfg:         cfg,
-		cache:       cache,
-		expirations: expirations,
-		file:        file,
+		cfg:          cfg,
+		cache:        cache,
+		expirations:  expirations,
+		file:         file,
+		deleterChans: deleterChans,
 	}
 }
 func (s *Service) Stop() {
@@ -58,6 +61,14 @@ func (s *Service) Set(key, value string, duration uint) {
 		Expiration: expiration,
 	}
 	s.expirations[expiration] = append(s.expirations[expiration], key)
+	if duration > 0 {
+		s.deleterChans[s.currentDeleter] <- time.Duration(duration) * time.Second
+	}
+	if s.currentDeleter == 9 {
+		s.currentDeleter = 0
+	} else {
+		s.currentDeleter++
+	}
 	s.Unlock()
 }
 

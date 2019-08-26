@@ -7,28 +7,31 @@ import (
 )
 
 type Service struct {
-	interval time.Duration
-	stop     chan bool
-	cache    *storage.Service
+	stop      chan bool
+	cache     *storage.Service
+	intervals chan time.Duration
 }
 
-func New(duration time.Duration, stop chan bool, cache *storage.Service) *Service {
+func New(stop chan bool, cache *storage.Service) *Service {
 	return &Service{
-		interval: duration,
-		stop:     stop,
-		cache:    cache,
+		stop:  stop,
+		cache: cache,
 	}
 }
 
 func (s *Service) Run() {
-	ticker := time.NewTicker(s.interval)
 	for {
-		select {
-		case <-ticker.C:
-			s.cache.DeleteExpired()
-		case <-s.stop:
-			ticker.Stop()
-			return
+		interval := <-s.intervals
+		ticker := time.NewTicker(interval)
+		for {
+			select {
+			case <-ticker.C:
+				s.cache.DeleteExpired()
+				break
+			case <-s.stop:
+				ticker.Stop()
+				return
+			}
 		}
 	}
 }

@@ -22,7 +22,7 @@ type Application struct {
 	listener net.Listener
 	storage  *storage.Service
 	logger   *log.Logger
-	deleter  *deleter.Service
+	deleters []*deleter.Service
 	dumper   *dumper.Service
 }
 
@@ -39,9 +39,24 @@ func New(cfg *config.Config) (*Application, error) {
 	if err != nil {
 		return nil, err
 	}
-	curStorage := storage.New(cfg, items, expirations, file)
-	stop := make(chan bool)
-	deleter := deleter.New(time.Duration(cfg.TTLCheckInterval)*time.Second, stop, curStorage)
+	var deleterChans []chan time.Duration
+	var deleterStops []chan bool
+	var n = 5
+	for n > 0 {
+		deleterChan := make(chan time.Duration, 2)
+		deleterChans = append(deleterChans, deleterChan)
+		deleterStop := make(chan bool)
+		deleterStops = append(deleterStops, deleterStop)
+		n--
+	}
+	curStorage := storage.New(cfg, items, expirations, file, deleterChans)
+	n = 5
+	var deleters []*deleter.Service
+	for n > 0 {
+		deleter := deleter.New(deleterStops[n-1], curStorage)
+		deleters = append(deleters, deleter)
+		n--
+	}
 	stopDump := make(chan bool)
 	dumper := dumper.New(time.Duration(cfg.DumpInterval)*time.Second, stopDump, curStorage)
 
@@ -50,7 +65,6 @@ func New(cfg *config.Config) (*Application, error) {
 		listener: listener,
 		logger:   log.New(os.Stdout, "Storage ", 0),
 		storage:  curStorage,
-		deleter:  deleter,
 		dumper:   dumper,
 	}, nil
 }
@@ -66,7 +80,11 @@ func (a *Application) Run() error {
 		a.logger.Println(err)
 		return err
 	}
-	go a.deleter.Run()
+
+	for _, deleter := range a.deleters {
+		go deleter.Run()
+	}
+
 	go a.dumper.Run()
 	go func() {
 		sc := make(chan os.Signal, 1)
@@ -130,7 +148,9 @@ func (a *Application) Run() error {
 
 func (a *Application) Quit() {
 	fmt.Println("Application quit")
-	a.deleter.Stop()
+	for _, deleter := range a.deleters {
+		deleter.Stop()
+	}
 	a.dumper.Stop()
 	a.listener.Close()
 	a.storage.Stop()
