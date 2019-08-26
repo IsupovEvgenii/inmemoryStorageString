@@ -64,7 +64,7 @@ func (s *Service) Set(key, value string, duration uint) {
 	if duration > 0 {
 		s.deleterChans[s.currentDeleter] <- time.Duration(duration) * time.Second
 	}
-	if s.currentDeleter == 9 {
+	if s.currentDeleter == 4 {
 		s.currentDeleter = 0
 	} else {
 		s.currentDeleter++
