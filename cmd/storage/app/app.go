@@ -43,7 +43,7 @@ func New(cfg *config.Config) (*Application, error) {
 	var deleterStops []chan bool
 	var n = 5
 	for n > 0 {
-		deleterChan := make(chan time.Duration, 2)
+		deleterChan := make(chan time.Duration, 1000)
 		deleterChans = append(deleterChans, deleterChan)
 		deleterStop := make(chan bool)
 		deleterStops = append(deleterStops, deleterStop)
